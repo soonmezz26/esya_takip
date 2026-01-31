@@ -2,12 +2,17 @@
   "background_color": "#ffffff",
   "dir": "ltr",
   "display": "standalone",
-  "name": "Eşya takip",
+  "name": "Esya Takip",
   "orientation": "any",
-  "scope": "https://soonmezz26.github.io/esya_takip/index3.html",
+  "scope": "/",
   "short_name": "Takip",
   "start_url": "https://soonmezz26.github.io/esya_takip/index3.html",
   "theme_color": "#ffffff",
-  "description": "Evinizdeki eşyaları kontrol edin",
-  "lang": "tr"
+  "description": "Evdeki eşyalarınızı düzenle takip edin",
+  "lang": "tr",
+  "categories": [
+    "books",
+    "entertainment",
+    "lifestyle"
+  ]
 }
