@@ -1,20 +1,15 @@
 {
-  "background_color": "#ffffff",
-  "dir": "ltr",
-  "display": "standalone",
   "name": "Esya Takip",
-  "orientation": "any",
-  "scope": "/esya_takip/",
   "short_name": "Takip",
   "start_url": "/esya_takip/index3.html",
+  "scope": "/esya_takip/",
+  "display": "standalone",
+  "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "description": "Evdeki eşyalarınızı düzenle takip edin",
   "lang": "tr",
-  "categories": [
-    "books",
-    "entertainment",
-    "lifestyle"
-  ],
+  "dir": "ltr",
+  "orientation": "any",
   "icons": [
     {
       "src": "icon-192x192.png",
