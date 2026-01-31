@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ev Eşyaları Takip Sistemi</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Ev eşyalarınızı ve kitaplarınızı kolayca takip edin">
+    <meta name="theme-color" content="#3B82F6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Ev Eşyaları">
+    
+    <!-- App Icon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%233B82F6'/><text x='50' y='70' font-size='60' text-anchor='middle' fill='white'>📦</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%233B82F6'/><text x='50' y='70' font-size='60' text-anchor='middle' fill='white'>📦</text></svg>">
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- PWA Manifest -->
+    <script>
+        // Create and inject manifest
+        const manifestData = {
+            name: "Ev Eşyaları Takip Sistemi",
+            short_name: "Ev Eşyaları",
+            description: "Ev eşyalarınızı ve kitaplarınızı kolayca takip edin",
+            start_url: window.location.pathname,
+            display: "standalone",
+            background_color: "#F3F4F6",
+            theme_color: "#3B82F6",
+            orientation: "portrait",
+            icons: [
+                {
+                    src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%233B82F6'/><text x='256' y='380' font-size='300' text-anchor='middle' fill='white'>📦</text></svg>",
+                    sizes: "512x512",
+                    type: "image/svg+xml",
+                    purpose: "any maskable"
+                }
+            ]
+        };
+        
+        const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+        const manifestURL = URL.createObjectURL(manifestBlob);
+        const manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = manifestURL;
+        document.head.appendChild(manifestLink);
+    </script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            // Create service worker inline
+            const swCode = `
+                const CACHE_NAME = 'ev-esyalari-v6';
+                
+                self.addEventListener('install', (event) => {
+                    self.skipWaiting();
+                });
+                
+                self.addEventListener('activate', (event) => {
+                    event.waitUntil(clients.claim());
+                });
+                
+                self.addEventListener('fetch', (event) => {
+                    // Let the browser handle all requests normally
+                    // This is a minimal service worker just to enable PWA installation
+                });
+            `;
+            
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            const swURL = URL.createObjectURL(blob);
+            
+            navigator.serviceWorker.register(swURL).then(() => {
+                console.log('PWA Service Worker registered');
+            }).catch((error) => {
+                console.log('Service Worker registration failed:', error);
+            });
+        }
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Lucide Icons as SVG components
+        const Package = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>;
+        const Home = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>;
+        const Users = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
+        const Plus = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+        const X = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
+        const Edit2 = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>;
+        const Search = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>;
+        const Trash2 = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+        const Settings = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v6m0 6v6m-9-9h6m6 0h6m-15.364 6.364l4.243-4.243m4.242 0l4.243 4.243m-12.728 0l4.243-4.243m4.242 0l4.243 4.243"></path></svg>;
+        const Download = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+        const Upload = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>;
+        const Barcode = ({ size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5v14"></path><path d="M8 5v14"></path><path d="M12 5v14"></path><path d="M17 5v14"></path><path d="M21 5v14"></path></svg>;
+
+        const EvEsyaTakip = () => {
+            const [items, setItems] = useState([]);
+            const [showAddModal, setShowAddModal] = useState(false);
+            const [showEditModal, setShowEditModal] = useState(false);
+            const [showSettingsModal, setShowSettingsModal] = useState(false);
+            const [editingItem, setEditingItem] = useState(null);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [filterRoom, setFilterRoom] = useState('Tümü');
+            const [filterType, setFilterType] = useState('Tümü');
+            const [filterBox, setFilterBox] = useState('Tümü');
+            const [filterStatus, setFilterStatus] = useState('Tümü');
+            const [filterBorrower, setFilterBorrower] = useState('Tümü');
+
+            const defaultRooms = ['Salon', 'Yatak Odası', 'Mutfak', 'Banyo', 'Çalışma Odası', 'Balkon', 'Depo'];
+            const defaultTypes = ['Elektronik', 'Giysi', 'Kitap', 'Mutfak Eşyası', 'Mobilya', 'Dekorasyon', 'Diğer'];
+            const defaultStatuses = ['evde', 'odunc'];
+            const defaultBoxes = ['Kutu 1', 'Kutu 2', 'Kutu 3', 'Üst Raf', 'Alt Raf', 'Orta Raf'];
+            const defaultBookCategories = ['Bilim Kurgu', 'Sanat', 'Bilimsel', 'Roman', 'Edebiyat', 'Türk Yazarlar', 'Çocuk Kitapları', 'Felsefe', 'Tarih'];
+
+            const [rooms, setRooms] = useState(defaultRooms);
+            const [types, setTypes] = useState(defaultTypes);
+            const [statuses, setStatuses] = useState(defaultStatuses);
+            const [boxes, setBoxes] = useState(defaultBoxes);
+            const [bookCategories, setBookCategories] = useState(defaultBookCategories);
+            const [userName, setUserName] = useState('');
+
+            useEffect(() => {
+                const saved = localStorage.getItem('evEsyalari');
+                if (saved) {
+                    setItems(JSON.parse(saved));
+                }
+                
+                const savedRooms = localStorage.getItem('odalar');
+                if (savedRooms) {
+                    setRooms(JSON.parse(savedRooms));
+                }
+                
+                const savedTypes = localStorage.getItem('turler');
+                if (savedTypes) {
+                    setTypes(JSON.parse(savedTypes));
+                }
+                
+                const savedStatuses = localStorage.getItem('durumlar');
+                if (savedStatuses) {
+                    setStatuses(JSON.parse(savedStatuses));
+                }
+                
+                const savedBoxes = localStorage.getItem('kutular');
+                if (savedBoxes) {
+                    setBoxes(JSON.parse(savedBoxes));
+                }
+                
+                const savedBookCategories = localStorage.getItem('kitapKategorileri');
+                if (savedBookCategories) {
+                    setBookCategories(JSON.parse(savedBookCategories));
+                }
+                
+                const savedUserName = localStorage.getItem('kullaniciAdi');
+                if (savedUserName) {
+                    setUserName(savedUserName);
+                }
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('evEsyalari', JSON.stringify(items));
+            }, [items]);
+
+            useEffect(() => {
+                localStorage.setItem('odalar', JSON.stringify(rooms));
+            }, [rooms]);
+
+            useEffect(() => {
+                localStorage.setItem('turler', JSON.stringify(types));
+            }, [types]);
+
+            useEffect(() => {
+                localStorage.setItem('durumlar', JSON.stringify(statuses));
+            }, [statuses]);
+
+            useEffect(() => {
+                localStorage.setItem('kutular', JSON.stringify(boxes));
+            }, [boxes]);
+
+            useEffect(() => {
+                localStorage.setItem('kitapKategorileri', JSON.stringify(bookCategories));
+            }, [bookCategories]);
+
+            useEffect(() => {
+                localStorage.setItem('kullaniciAdi', userName);
+            }, [userName]);
+
+            const handleDeleteItem = (id) => {
+                if (window.confirm('Bu eşyayı silmek istediğinizden emin misiniz?')) {
+                    setItems(items.filter(item => item.id !== id));
+                }
+            };
+
+            const handleExportData = () => {
+                const data = {
+                    items,
+                    rooms,
+                    types,
+                    statuses,
+                    boxes,
+                    bookCategories,
+                    userName,
+                    exportDate: new Date().toISOString()
+                };
+                
+                const dataStr = JSON.stringify(data, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                const userPart = userName ? `-${userName.toLowerCase().replace(/\s+/g, '-')}` : '';
+                const fileName = `ev-esyalari${userPart}-${new Date().toISOString().split('T')[0]}.json`;
+                link.download = fileName;
+                link.click();
+                URL.revokeObjectURL(url);
+                
+                setTimeout(() => {
+                    alert(`✅ Verileriniz dışa aktarıldı!\n\n📁 Dosya: ${fileName}\n📂 Konum: İndirilenler (Downloads) klasörü\n\n▶️ Sonraki adım: Bu dosyayı telefonunuza gönderin (WhatsApp, Bluetooth vb.)`);
+                }, 300);
+            };
+
+            const handleImportData = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        
+                        if (window.confirm('Mevcut veriler silinecek ve içe aktarılan verilerle değiştirilecek. Devam etmek istiyor musunuz?')) {
+                            if (data.items) setItems(data.items);
+                            if (data.rooms) setRooms(data.rooms);
+                            if (data.types) setTypes(data.types);
+                            if (data.statuses) setStatuses(data.statuses);
+                            if (data.boxes) setBoxes(data.boxes);
+                            if (data.bookCategories) setBookCategories(data.bookCategories);
+                            if (data.userName) setUserName(data.userName);
+                            
+                            alert('Veriler başarıyla içe aktarıldı!');
+                        }
+                    } catch (error) {
+                        alert('Dosya okunamadı. Lütfen geçerli bir yedek dosyası seçin.');
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            const filteredItems = items.filter(item => {
+                const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                    item.box.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                    (item.borrower && item.borrower.toLowerCase().includes(searchTerm.toLowerCase()));
+                const matchesRoom = filterRoom === 'Tümü' || item.room === filterRoom;
+                const matchesType = filterType === 'Tümü' || item.type === filterType;
+                const matchesBox = filterBox === 'Tümü' || item.box === filterBox;
+                const matchesStatus = filterStatus === 'Tümü' || item.status === filterStatus;
+                const matchesBorrower = filterBorrower === 'Tümü' || item.borrower === filterBorrower;
+                return matchesSearch && matchesRoom && matchesType && matchesBox && matchesStatus && matchesBorrower;
+            });
+
+            // Get unique borrowers for filter
+            const uniqueBorrowers = [...new Set(items.filter(i => i.borrower).map(i => i.borrower))].sort();
+
+            const Modal = ({ title, show, onClose, children }) => {
+                if (!show) return null;
+                return (
+                    <div 
+                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) onClose();
+                        }}
+                    >
+                        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                            <div className="p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
+                                    <button 
+                                        onClick={onClose} 
+                                        className="text-gray-500 hover:text-gray-700"
+                                        type="button"
+                                    >
+                                        <X size={24} />
+                                    </button>
+                                </div>
+                                {children}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const SettingsForm = ({ rooms, setRooms, types, setTypes, statuses, setStatuses, boxes, setBoxes, bookCategories, setBookCategories, userName, setUserName, onClose }) => {
+                const [newRoom, setNewRoom] = useState('');
+                const [newType, setNewType] = useState('');
+                const [newBox, setNewBox] = useState('');
+                const [newBookCategory, setNewBookCategory] = useState('');
+                const [localUserName, setLocalUserName] = useState(userName);
+
+                const handleSave = () => {
+                    setUserName(localUserName);
+                    onClose();
+                };
+
+                const addRoom = () => {
+                    if (newRoom.trim() && !rooms.includes(newRoom.trim())) {
+                        setRooms([...rooms, newRoom.trim()]);
+                        setNewRoom('');
+                    }
+                };
+
+                const removeRoom = (room) => {
+                    setRooms(rooms.filter(r => r !== room));
+                };
+
+                const addType = () => {
+                    if (newType.trim() && !types.includes(newType.trim())) {
+                        setTypes([...types, newType.trim()]);
+                        setNewType('');
+                    }
+                };
+
+                const removeType = (type) => {
+                    setTypes(types.filter(t => t !== type));
+                };
+
+                const addBox = () => {
+                    if (newBox.trim() && !boxes.includes(newBox.trim())) {
+                        setBoxes([...boxes, newBox.trim()]);
+                        setNewBox('');
+                    }
+                };
+
+                const removeBox = (box) => {
+                    setBoxes(boxes.filter(b => b !== box));
+                };
+
+                const addBookCategory = () => {
+                    if (newBookCategory.trim() && !bookCategories.includes(newBookCategory.trim())) {
+                        setBookCategories([...bookCategories, newBookCategory.trim()]);
+                        setNewBookCategory('');
+                    }
+                };
+
+                const removeBookCategory = (category) => {
+                    setBookCategories(bookCategories.filter(c => c !== category));
+                };
+
+                return (
+                    <div className="space-y-6">
+                        {/* Kullanıcı Adı */}
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">Kullanıcı Adı</h3>
+                            <input
+                                type="text"
+                                value={localUserName}
+                                onChange={(e) => setLocalUserName(e.target.value)}
+                                placeholder="Adınızı girin (örn: Kemal)"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <p className="text-sm text-gray-500 mt-2">Bu isim başlıkta ve dışa aktarılan dosya adında görünecek.</p>
+                        </div>
+
+                        {/* Odalar */}
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">Odalar</h3>
+                            <div className="flex gap-2 mb-3">
+                                <input
+                                    type="text"
+                                    value={newRoom}
+                                    onChange={(e) => setNewRoom(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addRoom()}
+                                    placeholder="Yeni oda ekle (örn: Araba)"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={addRoom}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                                >
+                                    Ekle
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {rooms.map(room => (
+                                    <div key={room} className="bg-gray-100 px-3 py-2 rounded-lg flex items-center gap-2">
+                                        <span>{room}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeRoom(room)}
+                                            className="text-red-600 hover:text-red-800"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Türler */}
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">Eşya Türleri</h3>
+                            <div className="flex gap-2 mb-3">
+                                <input
+                                    type="text"
+                                    value={newType}
+                                    onChange={(e) => setNewType(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addType()}
+                                    placeholder="Yeni tür ekle (örn: Oyuncak)"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={addType}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                                >
+                                    Ekle
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {types.map(type => (
+                                    <div key={type} className="bg-gray-100 px-3 py-2 rounded-lg flex items-center gap-2">
+                                        <span>{type}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeType(type)}
+                                            className="text-red-600 hover:text-red-800"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Kutular/Raflar */}
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">Kutular / Raflar</h3>
+                            <div className="flex gap-2 mb-3">
+                                <input
+                                    type="text"
+                                    value={newBox}
+                                    onChange={(e) => setNewBox(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addBox()}
+                                    placeholder="Yeni kutu/raf ekle (örn: Kutu A, Dolap Üstü)"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={addBox}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                                >
+                                    Ekle
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {boxes.map(box => (
+                                    <div key={box} className="bg-gray-100 px-3 py-2 rounded-lg flex items-center gap-2">
+                                        <span>{box}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeBox(box)}
+                                            className="text-red-600 hover:text-red-800"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Kitap Kategorileri */}
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">📚 Kitap Kategorileri</h3>
+                            <p className="text-sm text-gray-600 mb-3">Tür olarak "Kitap" seçildiğinde bu kategoriler görünecek.</p>
+                            <div className="flex gap-2 mb-3">
+                                <input
+                                    type="text"
+                                    value={newBookCategory}
+                                    onChange={(e) => setNewBookCategory(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addBookCategory()}
+                                    placeholder="Yeni kitap kategorisi ekle (örn: Polisiye)"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={addBookCategory}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                                >
+                                    Ekle
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {bookCategories.map(category => (
+                                    <div key={category} className="bg-blue-50 px-3 py-2 rounded-lg flex items-center gap-2">
+                                        <span>{category}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeBookCategory(category)}
+                                            className="text-red-600 hover:text-red-800"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="pt-4 border-t">
+                            <button
+                                type="button"
+                                onClick={handleSave}
+                                className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium"
+                            >
+                                Tamam
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            const ItemFormAdd = ({ onClose }) => {
+                const nameRef = useRef();
+                const roomRef = useRef();
+                const typeRef = useRef();
+                const boxRef = useRef();
+                const statusRef = useRef();
+                const borrowerRef = useRef();
+                const borrowDateRef = useRef();
+                const returnDateRef = useRef();
+                const bookCategoryRef1 = useRef();
+                const bookCategoryRef2 = useRef();
+                const bookCategoryRef3 = useRef();
+                const authorRef = useRef();
+                const publisherRef = useRef();
+                const yearRef = useRef();
+                const pagesRef = useRef();
+                const isbnRef = useRef();
+                const bookNotesRef = useRef();
+                const readingStatusRef = useRef();
+                const finishDateRef = useRef();
+                const [photo, setPhoto] = useState('');
+                const [showBorrower, setShowBorrower] = useState(false);
+                const [showBookCategory, setShowBookCategory] = useState(false);
+                const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+                const [scannedBookData, setScannedBookData] = useState(null);
+                const [manualIsbn, setManualIsbn] = useState('');
+                const [showFinishDate, setShowFinishDate] = useState(false);
+
+                const fetchBookData = async (isbn) => {
+                    if (!isbn || isbn.trim() === '') {
+                        alert('❌ Lütfen geçerli bir ISBN numarası girin.');
+                        return;
+                    }
+                    
+                    try {
+                        // Önce Open Library API'yi dene
+                        const openLibResponse = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+                        const openLibData = await openLibResponse.json();
+                        const bookKey = `ISBN:${isbn}`;
+                        
+                        if (openLibData[bookKey]) {
+                            const book = openLibData[bookKey];
+                            
+                            // Form alanlarını doldur
+                            if (nameRef.current) nameRef.current.value = book.title || '';
+                            if (authorRef.current) authorRef.current.value = book.authors ? book.authors.map(a => a.name).join(', ') : '';
+                            if (publisherRef.current) publisherRef.current.value = book.publishers ? book.publishers[0].name : '';
+                            if (yearRef.current) yearRef.current.value = book.publish_date || '';
+                            if (pagesRef.current) pagesRef.current.value = book.number_of_pages || '';
+                            if (isbnRef.current) isbnRef.current.value = isbn;
+                            
+                            // Kapak resmini ayarla
+                            if (book.cover?.large || book.cover?.medium) {
+                                setPhoto(book.cover.large || book.cover.medium);
+                            }
+                            
+                            alert('✅ Kitap bilgileri başarıyla yüklendi! (Open Library)');
+                            setManualIsbn('');
+                            return;
+                        }
+                        
+                        // Open Library'de bulunamadı, Google Books API'yi dene
+                        const googleResponse = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+                        const googleData = await googleResponse.json();
+                        
+                        if (googleData.items && googleData.items.length > 0) {
+                            const book = googleData.items[0].volumeInfo;
+                            
+                            // Form alanlarını doldur
+                            if (nameRef.current) nameRef.current.value = book.title || '';
+                            if (authorRef.current) authorRef.current.value = book.authors ? book.authors.join(', ') : '';
+                            if (publisherRef.current) publisherRef.current.value = book.publisher || '';
+                            if (yearRef.current) yearRef.current.value = book.publishedDate ? book.publishedDate.split('-')[0] : '';
+                            if (pagesRef.current) pagesRef.current.value = book.pageCount || '';
+                            if (isbnRef.current) isbnRef.current.value = isbn;
+                            
+                            // Kapak resmini ayarla
+                            if (book.imageLinks?.thumbnail || book.imageLinks?.smallThumbnail) {
+                                setPhoto(book.imageLinks.thumbnail || book.imageLinks.smallThumbnail);
+                            }
+                            
+                            alert('✅ Kitap bilgileri başarıyla yüklendi! (Google Books)');
+                            setManualIsbn('');
+                            return;
+                        }
+                        
+                        // Her iki API'de de bulunamadı
+                        alert('❌ Bu ISBN için kitap bilgisi bulunamadı. Manuel olarak girebilirsiniz.');
+                        
+                    } catch (error) {
+                        console.error('Error fetching book data:', error);
+                        alert('❌ Kitap bilgileri alınırken hata oluştu. İnternet bağlantınızı kontrol edin veya manuel olarak girin.');
+                    }
+                };
+
+                const handleBarcodeImageUpload = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const html5QrCode = new Html5Qrcode("barcode-file-reader");
+                        html5QrCode.scanFile(file, true)
+                            .then(decodedText => {
+                                fetchBookData(decodedText);
+                                html5QrCode.clear();
+                            })
+                            .catch(err => {
+                                console.error('Barcode scan error:', err);
+                                alert('❌ Barkod okunamadı. Lütfen ISBN numarasını manuel olarak girin.');
+                            });
+                    }
+                };
+
+                const handleSubmit = () => {
+                    const name = nameRef.current.value;
+                    const room = roomRef.current.value;
+                    const type = typeRef.current.value;
+                    
+                    if (name && room && type) {
+                        const newItem = {
+                            id: Date.now(),
+                            name,
+                            room,
+                            type,
+                            box: boxRef.current.value,
+                            photo,
+                            status: statusRef.current.value,
+                            borrower: borrowerRef.current ? borrowerRef.current.value : '',
+                            borrowDate: borrowDateRef.current ? borrowDateRef.current.value : '',
+                            returnDate: returnDateRef.current ? returnDateRef.current.value : '',
+                            bookCategory: (type === 'Kitap' && bookCategoryRef1.current) ? bookCategoryRef1.current.value : '',
+                            bookCategory2: (type === 'Kitap' && bookCategoryRef2.current) ? bookCategoryRef2.current.value : '',
+                            bookCategory3: (type === 'Kitap' && bookCategoryRef3.current) ? bookCategoryRef3.current.value : '',
+                            author: (type === 'Kitap' && authorRef.current) ? authorRef.current.value : '',
+                            publisher: (type === 'Kitap' && publisherRef.current) ? publisherRef.current.value : '',
+                            year: (type === 'Kitap' && yearRef.current) ? yearRef.current.value : '',
+                            pages: (type === 'Kitap' && pagesRef.current) ? pagesRef.current.value : '',
+                            isbn: (type === 'Kitap' && isbnRef.current) ? isbnRef.current.value : '',
+                            bookNotes: (type === 'Kitap' && bookNotesRef.current) ? bookNotesRef.current.value : '',
+                            readingStatus: (type === 'Kitap' && readingStatusRef.current) ? readingStatusRef.current.value : '',
+                            finishDate: (type === 'Kitap' && finishDateRef.current) ? finishDateRef.current.value : ''
+                        };
+                        setItems(prev => [...prev, newItem]);
+                        onClose();
+                    } else {
+                        alert('Lütfen zorunlu alanları doldurun (Eşya Adı, Oda, Tür)');
+                    }
+                };
+
+                const handlePhotoUpload = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            setPhoto(reader.result);
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                };
+
+                return (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Eşya Adı *</label>
+                            <input
+                                ref={nameRef}
+                                type="text"
+                                defaultValue=""
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="örn: MacBook Pro"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Oda *</label>
+                                <select
+                                    ref={roomRef}
+                                    defaultValue=""
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="">Seçiniz</option>
+                                    {rooms.map(room => <option key={room} value={room}>{room}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Tür *</label>
+                                <select
+                                    ref={typeRef}
+                                    defaultValue=""
+                                    onChange={(e) => setShowBookCategory(e.target.value === 'Kitap')}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="">Seçiniz</option>
+                                    {types.map(type => <option key={type} value={type}>{type}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        {showBookCategory && (
+                            <>
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                    <h4 className="font-bold text-blue-900 mb-3">📚 Kitap Bilgilerini Otomatik Getir</h4>
+                                    
+                                    <div className="space-y-3 mb-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Yöntem 1: Barkod Fotoğrafı</label>
+                                            <div id="barcode-file-reader" style={{display: 'none'}}></div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
+                                                    <span className="text-xl">📷</span>
+                                                    <span className="text-sm font-medium">Kamerayla Çek</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        capture="environment"
+                                                        onChange={handleBarcodeImageUpload}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer transition-colors">
+                                                    <span className="text-xl">🖼️</span>
+                                                    <span className="text-sm font-medium">Galeriden Seç</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handleBarcodeImageUpload}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">Kitabın barkod fotoğrafını çekin veya galeriden seçin</p>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 border-t border-gray-300"></div>
+                                            <span className="text-xs text-gray-500">VEYA</span>
+                                            <div className="flex-1 border-t border-gray-300"></div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Yöntem 2: ISBN Numarasını Girin</label>
+                                            <div className="flex gap-2">
+                                                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+                                                    <span className="bg-gray-100 px-3 py-2 text-gray-600 font-mono">978</span>
+                                                    <input
+                                                        type="text"
+                                                        value={manualIsbn}
+                                                        onChange={(e) => setManualIsbn(e.target.value)}
+                                                        placeholder="6053607878"
+                                                        className="px-3 py-2 border-0 focus:ring-0 focus:outline-none"
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fetchBookData('978' + manualIsbn)}
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-colors whitespace-nowrap"
+                                                >
+                                                    Bilgileri Getir
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">978 sonrası kalan rakamları girin (genelde 10 rakam)</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Yazar</label>
+                                            <input
+                                                ref={authorRef}
+                                                type="text"
+                                                defaultValue=""
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="Yazar adı"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Yayınevi</label>
+                                            <input
+                                                ref={publisherRef}
+                                                type="text"
+                                                defaultValue=""
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="Yayınevi"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Yıl</label>
+                                            <input
+                                                ref={yearRef}
+                                                type="text"
+                                                defaultValue=""
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="2024"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Sayfa</label>
+                                            <input
+                                                ref={pagesRef}
+                                                type="text"
+                                                defaultValue=""
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="320"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">ISBN</label>
+                                            <input
+                                                ref={isbnRef}
+                                                type="text"
+                                                defaultValue=""
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="ISBN numarası"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📚 Kitap Kategorisi 1 (Ana)</label>
+                                    <select
+                                        ref={bookCategoryRef1}
+                                        defaultValue=""
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        {bookCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📚 Kitap Kategorisi 2</label>
+                                    <select
+                                        ref={bookCategoryRef2}
+                                        defaultValue=""
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        {bookCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📚 Kitap Kategorisi 3</label>
+                                    <select
+                                        ref={bookCategoryRef3}
+                                        defaultValue=""
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        {bookCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            {/* Okuma Durumu ve Notlar */}
+                            <div className="space-y-3 mt-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📖 Okuma Durumu</label>
+                                    <select
+                                        ref={readingStatusRef}
+                                        defaultValue=""
+                                        onChange={(e) => setShowFinishDate(e.target.value === 'Okudum')}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        <option value="Henüz Başlamadım">Henüz Başlamadım</option>
+                                        <option value="Okunacak">Okunacak</option>
+                                        <option value="Okunuyor">Okunuyor</option>
+                                        <option value="Okudum">Okudum</option>
+                                    </select>
+                                </div>
+                                
+                                {showFinishDate && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">📅 Bitiş Tarihi</label>
+                                        <input
+                                            ref={finishDateRef}
+                                            type="date"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                )}
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📝 Notlarım (max 200 kelime)</label>
+                                    <textarea
+                                        ref={bookNotesRef}
+                                        rows="4"
+                                        maxLength="1200"
+                                        placeholder="Kitap hakkında düşünceleriniz, kısa özet, öneriler..."
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                    ></textarea>
+                                    <p className="text-xs text-gray-500 mt-1">Düşüncelerinizi, kısa özeti veya önerileri buraya yazabilirsiniz</p>
+                                </div>
+                            </div>
+                            </>
+                        )}
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Kutu/Konum</label>
+                            <select
+                                ref={boxRef}
+                                defaultValue=""
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Seçiniz (opsiyonel)</option>
+                                {boxes.map(box => <option key={box} value={box}>{box}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Fotoğraf</label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handlePhotoUpload}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            {photo && (
+                                <img src={photo} alt="Preview" className="mt-2 w-32 h-32 object-cover rounded-lg" />
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Durum</label>
+                            <select
+                                ref={statusRef}
+                                defaultValue="evde"
+                                onChange={(e) => setShowBorrower(e.target.value === 'odunc')}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                {statuses.map(status => (
+                                    <option key={status} value={status}>
+                                        {status === 'evde' ? 'Evde' : status === 'odunc' ? 'Ödünç Verildi' : status}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {showBorrower && (
+                            <div className="space-y-4 p-4 bg-yellow-50 rounded-lg">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Kime Verildi</label>
+                                    <input
+                                        ref={borrowerRef}
+                                        type="text"
+                                        defaultValue=""
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="Kişi adı"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Verilme Tarihi</label>
+                                        <input
+                                            ref={borrowDateRef}
+                                            type="date"
+                                            defaultValue=""
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Dönüş Tarihi</label>
+                                        <input
+                                            ref={returnDateRef}
+                                            type="date"
+                                            defaultValue=""
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                            >
+                                Kaydet
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 bg-gray-200 text-gray-800 px-6 py-3 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                            >
+                                İptal
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            const ItemFormEdit = ({ item, onClose }) => {
+                const nameRef = useRef();
+                const roomRef = useRef();
+                const typeRef = useRef();
+                const boxRef = useRef();
+                const statusRef = useRef();
+                const borrowerRef = useRef();
+                const borrowDateRef = useRef();
+                const returnDateRef = useRef();
+                const bookCategoryRef1 = useRef();
+                const bookCategoryRef2 = useRef();
+                const bookCategoryRef3 = useRef();
+                const authorRef = useRef();
+                const publisherRef = useRef();
+                const yearRef = useRef();
+                const pagesRef = useRef();
+                const isbnRef = useRef();
+                const bookNotesRef = useRef();
+                const readingStatusRef = useRef();
+                const finishDateRef = useRef();
+                const [photo, setPhoto] = useState(item.photo || '');
+                const [showBorrower, setShowBorrower] = useState(item.status === 'odunc');
+                const [showBookCategory, setShowBookCategory] = useState(item.type === 'Kitap');
+                const [manualIsbn, setManualIsbn] = useState('');
+                const [showFinishDate, setShowFinishDate] = useState(item.readingStatus === 'Okudum');
+
+                const fetchBookData = async (isbn) => {
+                    if (!isbn || isbn.trim() === '') {
+                        alert('❌ Lütfen geçerli bir ISBN numarası girin.');
+                        return;
+                    }
+                    
+                    try {
+                        // Önce Open Library API'yi dene
+                        const openLibResponse = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+                        const openLibData = await openLibResponse.json();
+                        const bookKey = `ISBN:${isbn}`;
+                        
+                        if (openLibData[bookKey]) {
+                            const book = openLibData[bookKey];
+                            
+                            if (nameRef.current) nameRef.current.value = book.title || '';
+                            if (authorRef.current) authorRef.current.value = book.authors ? book.authors.map(a => a.name).join(', ') : '';
+                            if (publisherRef.current) publisherRef.current.value = book.publishers ? book.publishers[0].name : '';
+                            if (yearRef.current) yearRef.current.value = book.publish_date || '';
+                            if (pagesRef.current) pagesRef.current.value = book.number_of_pages || '';
+                            if (isbnRef.current) isbnRef.current.value = isbn;
+                            
+                            if (book.cover?.large || book.cover?.medium) {
+                                setPhoto(book.cover.large || book.cover.medium);
+                            }
+                            
+                            alert('✅ Kitap bilgileri başarıyla yüklendi! (Open Library)');
+                            setManualIsbn('');
+                            return;
+                        }
+                        
+                        // Open Library'de bulunamadı, Google Books API'yi dene
+                        const googleResponse = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+                        const googleData = await googleResponse.json();
+                        
+                        if (googleData.items && googleData.items.length > 0) {
+                            const book = googleData.items[0].volumeInfo;
+                            
+                            if (nameRef.current) nameRef.current.value = book.title || '';
+                            if (authorRef.current) authorRef.current.value = book.authors ? book.authors.join(', ') : '';
+                            if (publisherRef.current) publisherRef.current.value = book.publisher || '';
+                            if (yearRef.current) yearRef.current.value = book.publishedDate ? book.publishedDate.split('-')[0] : '';
+                            if (pagesRef.current) pagesRef.current.value = book.pageCount || '';
+                            if (isbnRef.current) isbnRef.current.value = isbn;
+                            
+                            if (book.imageLinks?.thumbnail || book.imageLinks?.smallThumbnail) {
+                                setPhoto(book.imageLinks.thumbnail || book.imageLinks.smallThumbnail);
+                            }
+                            
+                            alert('✅ Kitap bilgileri başarıyla yüklendi! (Google Books)');
+                            setManualIsbn('');
+                            return;
+                        }
+                        
+                        alert('❌ Bu ISBN için kitap bilgisi bulunamadı.');
+                        
+                    } catch (error) {
+                        console.error('Error fetching book data:', error);
+                        alert('❌ Kitap bilgileri alınırken hata oluştu. İnternet bağlantınızı kontrol edin veya manuel olarak girin.');
+                    }
+                };
+
+                const handleBarcodeImageUpload = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const html5QrCode = new Html5Qrcode("barcode-file-reader-edit");
+                        html5QrCode.scanFile(file, true)
+                            .then(decodedText => {
+                                fetchBookData(decodedText);
+                                html5QrCode.clear();
+                            })
+                            .catch(err => {
+                                console.error('Barcode scan error:', err);
+                                alert('❌ Barkod okunamadı. Lütfen ISBN numarasını manuel olarak girin.');
+                            });
+                    }
+                };
+
+                const handleSubmit = () => {
+                    const name = nameRef.current.value;
+                    const room = roomRef.current.value;
+                    const type = typeRef.current.value;
+                    
+                    if (name && room && type) {
+                        const updatedItem = {
+                            ...item,
+                            name,
+                            room,
+                            type,
+                            box: boxRef.current.value,
+                            photo,
+                            status: statusRef.current.value,
+                            borrower: borrowerRef.current ? borrowerRef.current.value : '',
+                            borrowDate: borrowDateRef.current ? borrowDateRef.current.value : '',
+                            returnDate: returnDateRef.current ? returnDateRef.current.value : '',
+                            bookCategory: (type === 'Kitap' && bookCategoryRef1.current) ? bookCategoryRef1.current.value : '',
+                            bookCategory2: (type === 'Kitap' && bookCategoryRef2.current) ? bookCategoryRef2.current.value : '',
+                            bookCategory3: (type === 'Kitap' && bookCategoryRef3.current) ? bookCategoryRef3.current.value : '',
+                            author: (type === 'Kitap' && authorRef.current) ? authorRef.current.value : '',
+                            publisher: (type === 'Kitap' && publisherRef.current) ? publisherRef.current.value : '',
+                            year: (type === 'Kitap' && yearRef.current) ? yearRef.current.value : '',
+                            pages: (type === 'Kitap' && pagesRef.current) ? pagesRef.current.value : '',
+                            isbn: (type === 'Kitap' && isbnRef.current) ? isbnRef.current.value : '',
+                            bookNotes: (type === 'Kitap' && bookNotesRef.current) ? bookNotesRef.current.value : '',
+                            readingStatus: (type === 'Kitap' && readingStatusRef.current) ? readingStatusRef.current.value : '',
+                            finishDate: (type === 'Kitap' && finishDateRef.current) ? finishDateRef.current.value : ''
+                        };
+                        setItems(prev => prev.map(i => i.id === item.id ? updatedItem : i));
+                        onClose();
+                    } else {
+                        alert('Lütfen zorunlu alanları doldurun (Eşya Adı, Oda, Tür)');
+                    }
+                };
+
+                const handlePhotoUpload = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            setPhoto(reader.result);
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                };
+
+                return (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Eşya Adı *</label>
+                            <input
+                                ref={nameRef}
+                                type="text"
+                                defaultValue={item.name}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="örn: MacBook Pro"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Oda *</label>
+                                <select
+                                    ref={roomRef}
+                                    defaultValue={item.room}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="">Seçiniz</option>
+                                    {rooms.map(room => <option key={room} value={room}>{room}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Tür *</label>
+                                <select
+                                    ref={typeRef}
+                                    defaultValue={item.type}
+                                    onChange={(e) => setShowBookCategory(e.target.value === 'Kitap')}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="">Seçiniz</option>
+                                    {types.map(type => <option key={type} value={type}>{type}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        {showBookCategory && (
+                            <>
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                    <h4 className="font-bold text-blue-900 mb-3">📚 Kitap Bilgilerini Otomatik Getir</h4>
+                                    
+                                    <div className="space-y-3 mb-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Yöntem 1: Barkod Fotoğrafı</label>
+                                            <div id="barcode-file-reader-edit" style={{display: 'none'}}></div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
+                                                    <span className="text-xl">📷</span>
+                                                    <span className="text-sm font-medium">Kamerayla Çek</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        capture="environment"
+                                                        onChange={handleBarcodeImageUpload}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer transition-colors">
+                                                    <span className="text-xl">🖼️</span>
+                                                    <span className="text-sm font-medium">Galeriden Seç</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handleBarcodeImageUpload}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">Kitabın barkod fotoğrafını çekin veya galeriden seçin</p>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 border-t border-gray-300"></div>
+                                            <span className="text-xs text-gray-500">VEYA</span>
+                                            <div className="flex-1 border-t border-gray-300"></div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Yöntem 2: ISBN Numarasını Girin</label>
+                                            <div className="flex gap-2">
+                                                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+                                                    <span className="bg-gray-100 px-3 py-2 text-gray-600 font-mono">978</span>
+                                                    <input
+                                                        type="text"
+                                                        value={manualIsbn}
+                                                        onChange={(e) => setManualIsbn(e.target.value)}
+                                                        placeholder="6053607878"
+                                                        className="px-3 py-2 border-0 focus:ring-0 focus:outline-none"
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fetchBookData('978' + manualIsbn)}
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-colors whitespace-nowrap"
+                                                >
+                                                    Bilgileri Getir
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">978 sonrası kalan rakamları girin (genelde 10 rakam)</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Yazar</label>
+                                            <input
+                                                ref={authorRef}
+                                                type="text"
+                                                defaultValue={item.author || ''}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="Yazar adı"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Yayınevi</label>
+                                            <input
+                                                ref={publisherRef}
+                                                type="text"
+                                                defaultValue={item.publisher || ''}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="Yayınevi"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Yıl</label>
+                                            <input
+                                                ref={yearRef}
+                                                type="text"
+                                                defaultValue={item.year || ''}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="2024"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Sayfa</label>
+                                            <input
+                                                ref={pagesRef}
+                                                type="text"
+                                                defaultValue={item.pages || ''}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="320"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">ISBN</label>
+                                            <input
+                                                ref={isbnRef}
+                                                type="text"
+                                                defaultValue={item.isbn || ''}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                placeholder="ISBN numarası"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📚 Kitap Kategorisi 1 (Ana)</label>
+                                    <select
+                                        ref={bookCategoryRef1}
+                                        defaultValue={item.bookCategory || ''}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        {bookCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📚 Kitap Kategorisi 2</label>
+                                    <select
+                                        ref={bookCategoryRef2}
+                                        defaultValue={item.bookCategory2 || ''}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        {bookCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📚 Kitap Kategorisi 3</label>
+                                    <select
+                                        ref={bookCategoryRef3}
+                                        defaultValue={item.bookCategory3 || ''}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        {bookCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            {/* Okuma Durumu ve Notlar */}
+                            <div className="space-y-3 mt-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📖 Okuma Durumu</label>
+                                    <select
+                                        ref={readingStatusRef}
+                                        defaultValue={item.readingStatus || ''}
+                                        onChange={(e) => setShowFinishDate(e.target.value === 'Okudum')}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seçiniz (opsiyonel)</option>
+                                        <option value="Henüz Başlamadım">Henüz Başlamadım</option>
+                                        <option value="Okunacak">Okunacak</option>
+                                        <option value="Okunuyor">Okunuyor</option>
+                                        <option value="Okudum">Okudum</option>
+                                    </select>
+                                </div>
+                                
+                                {showFinishDate && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">📅 Bitiş Tarihi</label>
+                                        <input
+                                            ref={finishDateRef}
+                                            type="date"
+                                            defaultValue={item.finishDate || ''}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                )}
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">📝 Notlarım (max 200 kelime)</label>
+                                    <textarea
+                                        ref={bookNotesRef}
+                                        rows="4"
+                                        maxLength="1200"
+                                        defaultValue={item.bookNotes || ''}
+                                        placeholder="Kitap hakkında düşünceleriniz, kısa özet, öneriler..."
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                    ></textarea>
+                                    <p className="text-xs text-gray-500 mt-1">Düşüncelerinizi, kısa özeti veya önerileri buraya yazabilirsiniz</p>
+                                </div>
+                            </div>
+                            </>
+                        )}
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Kutu/Konum</label>
+                            <select
+                                ref={boxRef}
+                                defaultValue={item.box}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Seçiniz (opsiyonel)</option>
+                                {boxes.map(box => <option key={box} value={box}>{box}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Fotoğraf</label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handlePhotoUpload}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            {photo && (
+                                <img src={photo} alt="Preview" className="mt-2 w-32 h-32 object-cover rounded-lg" />
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Durum</label>
+                            <select
+                                ref={statusRef}
+                                defaultValue={item.status}
+                                onChange={(e) => setShowBorrower(e.target.value === 'odunc')}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                {statuses.map(status => (
+                                    <option key={status} value={status}>
+                                        {status === 'evde' ? 'Evde' : status === 'odunc' ? 'Ödünç Verildi' : status}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {showBorrower && (
+                            <div className="space-y-4 p-4 bg-yellow-50 rounded-lg">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Kime Verildi</label>
+                                    <input
+                                        ref={borrowerRef}
+                                        type="text"
+                                        defaultValue={item.borrower}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="Kişi adı"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Verilme Tarihi</label>
+                                        <input
+                                            ref={borrowDateRef}
+                                            type="date"
+                                            defaultValue={item.borrowDate}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Dönüş Tarihi</label>
+                                        <input
+                                            ref={returnDateRef}
+                                            type="date"
+                                            defaultValue={item.returnDate}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                            >
+                                Kaydet
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 bg-gray-200 text-gray-800 px-6 py-3 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                            >
+                                İptal
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-6">
+                    <div className="max-w-7xl mx-auto">
+                        <div className="bg-white rounded-xl shadow-lg p-4 md:p-6 mb-6">
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
+                                <div className="flex items-center gap-3">
+                                    <Home size={32} />
+                                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+                                        Ev Eşyaları Takip{userName && <span className="text-blue-600"> - {userName}</span>}
+                                    </h1>
+                                </div>
+                                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAddModal(true)}
+                                        className="flex-1 md:flex-none bg-blue-600 text-white px-6 py-4 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-bold text-lg transition-colors shadow-lg"
+                                    >
+                                        <Plus size={24} />
+                                        Yeni Eşya
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleExportData}
+                                        className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-medium transition-colors"
+                                        title="Verileri Dışa Aktar"
+                                    >
+                                        <Upload size={20} />
+                                        <span className="hidden sm:inline">Dışa Aktar</span>
+                                    </button>
+                                    <label className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2 font-medium transition-colors cursor-pointer" title="Verileri İçe Aktar">
+                                        <Download size={20} />
+                                        <span className="hidden sm:inline">İçe Aktar</span>
+                                        <input
+                                            type="file"
+                                            accept=".json"
+                                            onChange={handleImportData}
+                                            className="hidden"
+                                        />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSettingsModal(true)}
+                                        className="bg-gray-600 text-white px-4 py-3 rounded-lg hover:bg-gray-700 flex items-center justify-center gap-2 font-medium transition-colors"
+                                    >
+                                        <Settings size={20} />
+                                        <span className="hidden sm:inline">Ayarlar</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+                                <div className="relative">
+                                    <div className="absolute left-3 top-3 text-gray-400">
+                                        <Search size={20} />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Eşya, kutu, kişi ara..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <select
+                                    value={filterRoom}
+                                    onChange={(e) => setFilterRoom(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="Tümü">Tüm Odalar</option>
+                                    {rooms.map(room => <option key={room} value={room}>{room}</option>)}
+                                </select>
+
+                                <select
+                                    value={filterType}
+                                    onChange={(e) => setFilterType(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="Tümü">Tüm Türler</option>
+                                    {types.map(type => <option key={type} value={type}>{type}</option>)}
+                                </select>
+
+                                <select
+                                    value={filterBox}
+                                    onChange={(e) => setFilterBox(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="Tümü">Tüm Konumlar</option>
+                                    {boxes.map(box => <option key={box} value={box}>{box}</option>)}
+                                </select>
+
+                                <select
+                                    value={filterStatus}
+                                    onChange={(e) => setFilterStatus(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="Tümü">Tüm Durumlar</option>
+                                    <option value="evde">Evde</option>
+                                    <option value="odunc">Ödünç Verildi</option>
+                                </select>
+
+                                <select
+                                    value={filterBorrower}
+                                    onChange={(e) => setFilterBorrower(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="Tümü">Tüm Kişiler</option>
+                                    {uniqueBorrowers.map(borrower => (
+                                        <option key={borrower} value={borrower}>{borrower}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="bg-blue-50 p-4 rounded-lg">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                    <div>
+                                        <div className="text-2xl font-bold text-blue-600">{items.length}</div>
+                                        <div className="text-sm text-gray-600">Toplam Eşya</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-bold text-green-600">
+                                            {items.filter(i => i.status === 'evde').length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Evde</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-bold text-yellow-600">
+                                            {items.filter(i => i.status === 'odunc').length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Ödünç Verildi</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-bold text-purple-600">{rooms.length}</div>
+                                        <div className="text-sm text-gray-600">Oda</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Filtrelenmiş Sonuçlar İstatistiği */}
+                            {(filterRoom !== 'Tümü' || filterType !== 'Tümü' || filterBox !== 'Tümü' || filterStatus !== 'Tümü' || filterBorrower !== 'Tümü' || searchTerm) && (
+                                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg border-2 border-indigo-200 mt-4">
+                                    <div className="text-center">
+                                        <div className="text-3xl font-bold text-indigo-600 mb-2">{filteredItems.length}</div>
+                                        <div className="text-sm font-medium text-gray-700 mb-2">Filtrelenmiş Sonuç</div>
+                                        <div className="flex flex-wrap justify-center gap-2 text-xs">
+                                            {searchTerm && (
+                                                <span className="bg-white px-2 py-1 rounded-full border border-indigo-200">
+                                                    🔍 Arama: "{searchTerm}"
+                                                </span>
+                                            )}
+                                            {filterRoom !== 'Tümü' && (
+                                                <span className="bg-white px-2 py-1 rounded-full border border-indigo-200">
+                                                    🏠 {filterRoom}
+                                                </span>
+                                            )}
+                                            {filterType !== 'Tümü' && (
+                                                <span className="bg-white px-2 py-1 rounded-full border border-indigo-200">
+                                                    📦 {filterType}
+                                                </span>
+                                            )}
+                                            {filterBox !== 'Tümü' && (
+                                                <span className="bg-white px-2 py-1 rounded-full border border-indigo-200">
+                                                    📍 {filterBox}
+                                                </span>
+                                            )}
+                                            {filterStatus !== 'Tümü' && (
+                                                <span className="bg-white px-2 py-1 rounded-full border border-indigo-200">
+                                                    {filterStatus === 'evde' ? '🏡 Evde' : '📤 Ödünç'}
+                                                </span>
+                                            )}
+                                            {filterBorrower !== 'Tümü' && (
+                                                <span className="bg-white px-2 py-1 rounded-full border border-indigo-200">
+                                                    👤 {filterBorrower}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                            {[...filteredItems].reverse().map(item => (
+                                <div key={item.id} className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow overflow-hidden">
+                                    {item.photo && (
+                                        <div className="w-full h-64 bg-white flex items-center justify-center overflow-hidden">
+                                            <img src={item.photo} alt={item.name} className="w-full h-full object-contain" />
+                                        </div>
+                                    )}
+                                    <div className="p-5">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex-1">
+                                                <h3 className="text-xl font-bold text-gray-800 mb-1">{item.name}</h3>
+                                                {item.status === 'odunc' && item.borrower && (
+                                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-semibold">
+                                                        <Users size={16} />
+                                                        <span>{item.borrower}'de</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setEditingItem(item);
+                                                        setShowEditModal(true);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-800"
+                                                >
+                                                    <Edit2 size={18} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteItem(item.id)}
+                                                    className="text-red-600 hover:text-red-800"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex items-center gap-2 text-gray-600">
+                                                <Home size={16} />
+                                                <span className="font-medium">{item.room}</span>
+                                                <span className="text-gray-400">•</span>
+                                                <span>{item.type}</span>
+                                            </div>
+                                            
+                                            {item.type === 'Kitap' && (item.bookCategory || item.bookCategory2 || item.bookCategory3) && (
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {item.bookCategory && (
+                                                        <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium">
+                                                            📚 {item.bookCategory}
+                                                        </span>
+                                                    )}
+                                                    {item.bookCategory2 && (
+                                                        <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium">
+                                                            📚 {item.bookCategory2}
+                                                        </span>
+                                                    )}
+                                                    {item.bookCategory3 && (
+                                                        <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium">
+                                                            📚 {item.bookCategory3}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                            
+                                            {item.type === 'Kitap' && (item.author || item.publisher || item.year || item.pages) && (
+                                                <div className="text-xs text-gray-600 space-y-1 mt-2 p-2 bg-gray-50 rounded">
+                                                    {item.author && <div><strong>Yazar:</strong> {item.author}</div>}
+                                                    {item.publisher && <div><strong>Yayınevi:</strong> {item.publisher}</div>}
+                                                    <div className="flex gap-3">
+                                                        {item.year && <span><strong>Yıl:</strong> {item.year}</span>}
+                                                        {item.pages && <span><strong>Sayfa:</strong> {item.pages}</span>}
+                                                    </div>
+                                                    {item.isbn && <div className="text-xs text-gray-500">ISBN: {item.isbn}</div>}
+                                                </div>
+                                            )}
+                                            
+                                            {item.type === 'Kitap' && item.readingStatus && (
+                                                <div className="mt-2">
+                                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                                                        item.readingStatus === 'Okudum' ? 'bg-green-100 text-green-800' :
+                                                        item.readingStatus === 'Okunuyor' ? 'bg-blue-100 text-blue-800' :
+                                                        item.readingStatus === 'Okunacak' ? 'bg-purple-100 text-purple-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                    }`}>
+                                                        📖 {item.readingStatus}
+                                                        {item.readingStatus === 'Okudum' && item.finishDate && (
+                                                            <span className="ml-2 text-xs">• {new Date(item.finishDate).toLocaleDateString('tr-TR')}</span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            
+                                            {item.type === 'Kitap' && item.bookNotes && (
+                                                <div className="mt-2 p-2 bg-amber-50 rounded border border-amber-200">
+                                                    <div className="text-xs font-semibold text-amber-900 mb-1">📝 Notlarım:</div>
+                                                    <div className="text-xs text-gray-700 line-clamp-3">{item.bookNotes}</div>
+                                                </div>
+                                            )}
+
+                                            {item.box && (
+                                                <div className="flex items-center gap-2 text-gray-600">
+                                                    <Package size={16} />
+                                                    <span>{item.box}</span>
+                                                </div>
+                                            )}
+
+                                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+                                                item.status === 'evde' 
+                                                    ? 'bg-green-100 text-green-800' 
+                                                    : 'bg-yellow-100 text-yellow-800'
+                                            }`}>
+                                                {item.status === 'evde' ? 'Evde' : 'Ödünç Verildi'}
+                                            </div>
+
+                                            {item.status === 'odunc' && (item.borrowDate || item.returnDate) && (
+                                                <div className="mt-3 p-3 bg-yellow-50 rounded-lg">
+                                                    {item.borrowDate && (
+                                                        <div className="text-xs text-gray-600">
+                                                            Verilme: {new Date(item.borrowDate).toLocaleDateString('tr-TR')}
+                                                        </div>
+                                                    )}
+                                                    {item.returnDate && (
+                                                        <div className="text-xs text-gray-600">
+                                                            Dönüş: {new Date(item.returnDate).toLocaleDateString('tr-TR')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {filteredItems.length === 0 && (
+                            <div className="bg-white rounded-xl shadow-md p-12 text-center">
+                                <Package size={64} />
+                                <p className="text-gray-500 text-lg mt-4">Henüz eşya eklenmemiş veya arama kriterlerinize uygun eşya bulunamadı.</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <Modal title="Yeni Eşya Ekle" show={showAddModal} onClose={() => setShowAddModal(false)}>
+                        <ItemFormAdd onClose={() => setShowAddModal(false)} />
+                    </Modal>
+
+                    <Modal title="Eşyayı Düzenle" show={showEditModal} onClose={() => setShowEditModal(false)}>
+                        {editingItem && (
+                            <ItemFormEdit item={editingItem} onClose={() => setShowEditModal(false)} />
+                        )}
+                    </Modal>
+
+                    <Modal title="Kategori Ayarları" show={showSettingsModal} onClose={() => setShowSettingsModal(false)}>
+                        <SettingsForm 
+                            rooms={rooms} 
+                            setRooms={setRooms}
+                            types={types}
+                            setTypes={setTypes}
+                            statuses={statuses}
+                            setStatuses={setStatuses}
+                            boxes={boxes}
+                            setBoxes={setBoxes}
+                            bookCategories={bookCategories}
+                            setBookCategories={setBookCategories}
+                            userName={userName}
+                            setUserName={setUserName}
+                            onClose={() => setShowSettingsModal(false)}
+                        />
+                    </Modal>
+                    
+                    {/* Footer */}
+                    <div className="text-center py-6 text-xs text-gray-400">
+                        <p>Coding by Claude • Idea by Kemal Sönmez</p>
+                        <p className="mt-2 text-xs text-blue-400">💡 İpucu: Tarayıcınızdan "Ana Ekrana Ekle" ile uygulama gibi kullanabilirsiniz</p>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<EvEsyaTakip />, document.getElementById('root'));
+    </script>
+</body>
+</html>
